@@ -12,6 +12,7 @@ import uppsat.theory.FloatingPointTheory._
 import uppsat.theory.IntegerTheory._
 import uppsat.solver._
 import uppsat.approximation.components._
+import uppsat.approximation.fpa.smallfloats.IJCARSmallFloatsLocalSearch
 import uppsat.precision.PrecisionMap.Path
 //import uppsat.Encoder.PathMap
 import uppsat.ModelEvaluator.Model
@@ -52,7 +53,8 @@ object globalOptions {
                          "acdcl" -> new MathSatSolver("ACDCL (Mathsat)", "-theory.fp.mode=2 "), 
                          "nlsat" -> new Z3Solver("NLSAT","(check-sat-using qfnra-nlsat)\n")) 
                          
-  val REG_APPROXS = Map( "ijcar" ->  new Approximation(IJCARSmallFloatsApp), 
+  val REG_APPROXS = Map( "ijcar" ->  new Approximation(IJCARSmallFloatsApp),
+                          "ijcar-ls" -> new Approximation(IJCARSmallFloatsLocalSearch),
                           "saturation" ->  new Approximation(FxPntSmallFloatsApp),
                           "smallints" ->  new Approximation(SmallIntsApp),
                           "reals" ->  new Approximation(FPARealApp),

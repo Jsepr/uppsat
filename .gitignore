@@ -76,3 +76,7 @@ reduced2\.smt2
 reduced\.smt2
 
 *.out
+
+.idea/
+
+uppsat.iml
