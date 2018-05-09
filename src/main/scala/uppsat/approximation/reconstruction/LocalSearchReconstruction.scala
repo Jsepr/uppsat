@@ -15,7 +15,6 @@ import uppsat.theory.FloatingPointTheory
 import uppsat.theory.BooleanTheory._
 import uppsat.theory.BooleanTheory.BoolEquality
 import uppsat.theory.IntegerTheory.{IntEquality, IntegerPredicateSymbol}
-import uppsat.theory.FloatingPointTheory
 import uppsat.theory.FloatingPointTheory.{FPEqualityFactory, FPFPEqualityFactory, FPPredicateSymbol, FPSpecialValuesFactory, FPVar, FloatingPointLiteral, FloatingPointPredicateSymbol, RMVar, RoundingModeEquality}
 import uppsat.theory.FloatingPointTheory.FPSortFactory.FPSort
 import uppsat.approximation.toolbox.Toolbox
@@ -41,13 +40,13 @@ trait LocalSearchReconstruction extends ModelReconstruction {
       case fpLit: FloatingPointLiteral =>
         val (sign, ebits, sbits) = (fpLit.sign, fpLit.eBits, fpLit.sBits)
         val lastOneIndex = getLastOneIndex(sbits)
+        
         var modifyIndex = lastOneIndex + shift
         if (!(modifyIndex < sbits.size))
           modifyIndex = sbits.size - 1
         val newsBits = sbits.updated(modifyIndex, 1)
         val newSymbol = FloatingPointTheory.fp(sign, ebits, newsBits)(fpLit.sort)
         newSymbol
-
       case _ => symbol
     }
   }
@@ -87,7 +86,6 @@ trait LocalSearchReconstruction extends ModelReconstruction {
         case _: FPVar =>
           modelList ++= generateModels(candidateModel, v)
         case _ =>
-          println("Not FPVar, doing nothing...")
       }
     }
 
@@ -104,20 +102,26 @@ trait LocalSearchReconstruction extends ModelReconstruction {
   def calculateFitness(failedAtoms: List[AST], model: Model): Double = {
     var fitness : Double = 0
     for (a <- failedAtoms) {
-      val (left: FloatingPointLiteral, right: FloatingPointLiteral) =
+      val (left, right) =
         (model(a.children(0)).symbol, model(a.children(1)).symbol)
-      val lDouble = FloatingPointTheory.bitsToDouble(left)
-      val rDouble = FloatingPointTheory.bitsToDouble(right)
+      (left, right) match {
+        case (lfp : FloatingPointLiteral, rfp: FloatingPointLiteral) =>
+          val lDouble = FloatingPointTheory.bitsToDouble(lfp)
+          val rDouble = FloatingPointTheory.bitsToDouble(rfp)
 
-      a.symbol.name match {
-        case FloatingPointTheory.FPFPEqualityFactory.symbolName =>
-          fitness += Math.abs(lDouble - rDouble)
-        case FloatingPointTheory.FPLessThanFactory.symbolName =>
-          fitness += lDouble - rDouble
-        case FloatingPointTheory.FPGreaterThanFactory.symbolName =>
-          fitness += rDouble - lDouble
+          a.symbol.name match {
+            case FloatingPointTheory.FPFPEqualityFactory.symbolName =>
+              fitness += Math.abs(lDouble - rDouble)
+            case FloatingPointTheory.FPEqualityFactory.symbolName =>
+              fitness += Math.abs(lDouble - rDouble)
+            case FloatingPointTheory.FPLessThanFactory.symbolName =>
+              fitness += lDouble - rDouble
+            case FloatingPointTheory.FPGreaterThanFactory.symbolName =>
+              fitness += rDouble - lDouble
+            case _ =>
+              throw new Exception("Not a valid Predicate " + a.symbol.name)
+          }
         case _ =>
-          throw new Exception("Not a valid Predicate " + a.symbol.name)
       }
     }
     fitness
@@ -281,17 +285,21 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     var filteredModels = ListBuffer() : ListBuffer[(Model, Double)]
 
     var referenceM = decodedModel
+
+    println("Searching for candidates...")
     while (!done && steps < 10) {
       val reconstructedModel: Model = postReconstruct(formula, referenceM)
       val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
-        println("Searching for candidates...")
         val neighborHood = generateNeighborhood(formula, reconstructedModel, referenceM, failedAtoms)
         filteredModels = filterByFitness(neighborHood, filteredModels, decodedModel, formula)
 
         referenceM = filteredModels.head._1
+        println("Candidate model: ")
+        println("Fitness: " + filteredModels.head._2)
+        println(referenceM)
         filteredModels.remove(0)
       } else {
         done = true
