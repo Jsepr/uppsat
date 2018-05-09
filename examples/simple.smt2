@@ -12,9 +12,8 @@
 
 (define-fun sum () (_ FloatingPoint 11 53) (fp.add rm a b))
 (define-fun c () (_ FloatingPoint 11 53) (fp #b0 #b10000001000 #b1111111000010000000000000000000000000000000000000000))
-(define-fun cond () Bool (fp.gt sum c))
 
-(assert cond)
+(assert (fp.gt sum c))
 
 (check-sat)
 (exit)

@@ -7,9 +7,9 @@
 ;; generated on 05/20/15 17:24:51
 (declare-fun x () (_ FloatingPoint 11 53))
 (declare-fun y () (_ FloatingPoint 11 53))
-(define-fun rn () RoundingMode RNE)
+(define-fun rm () RoundingMode RNE)
 
-(assert (fp.eq y (fp.add rn x (fp #b0 #b01111111111 #b1100000000000000000000000000000000000000000000000000))))
+(assert (fp.eq y (fp.add rm x (fp #b0 #b01111111111 #b1100000000000000000000000000000000000000000000000000))))
 (assert (fp.gt y (fp #b0 #b00000000000 #b0000000000000000000000000000000000000000000000000000)))
 (assert (or
   (fp.eq x (fp #b0 #b10000000000 #b0000000000000000000000000000000000000000000000000000))

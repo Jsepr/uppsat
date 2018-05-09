@@ -15,6 +15,7 @@ import uppsat.theory.FloatingPointTheory
 import uppsat.theory.BooleanTheory._
 import uppsat.theory.BooleanTheory.BoolEquality
 import uppsat.theory.IntegerTheory.{IntEquality, IntegerPredicateSymbol}
+import uppsat.theory.FloatingPointTheory
 import uppsat.theory.FloatingPointTheory.{FPEqualityFactory, FPFPEqualityFactory, FPPredicateSymbol, FPSpecialValuesFactory, FPVar, FloatingPointLiteral, FloatingPointPredicateSymbol, RMVar, RoundingModeEquality}
 import uppsat.theory.FloatingPointTheory.FPSortFactory.FPSort
 import uppsat.approximation.toolbox.Toolbox
@@ -27,23 +28,24 @@ import uppsat.globalOptions
 trait LocalSearchReconstruction extends ModelReconstruction {
 
   def getLastOneIndex(ints: List[Int]): Int = {
-    for (i <- (ints.size - 1) to 0 by -1) {
+    for (i <- (ints.size - 2) to 0 by -1) {
       if (ints(i) == 1)
         return i
     }
     -1
   }
 
-  def modifyBits(symbol: ConcreteFunctionSymbol): ConcreteFunctionSymbol = {
+  def modifyBits(symbol: ConcreteFunctionSymbol, shift: Int): ConcreteFunctionSymbol = {
     symbol match {
       case _: FPSpecialValuesFactory => symbol
       case fpLit: FloatingPointLiteral =>
         val (sign, ebits, sbits) = (fpLit.sign, fpLit.eBits, fpLit.sBits)
         val lastOneIndex = getLastOneIndex(sbits)
-        val newsBits = sbits.updated(lastOneIndex + 1, 1)
+        var modifyIndex = lastOneIndex + shift
+        if (!(modifyIndex < sbits.size))
+          modifyIndex = sbits.size - 1
+        val newsBits = sbits.updated(modifyIndex, 1)
         val newSymbol = FloatingPointTheory.fp(sign, ebits, newsBits)(fpLit.sort)
-        println(lastOneIndex)
-        println(symbol + " <- " + newSymbol)
         newSymbol
 
       case _ => symbol
@@ -57,48 +59,81 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     newModel
   }
 
-  def generateModels(formula: AST, candidateModel: Model, failedAtoms: List[AST]): ListBuffer[Model] = {
+  def generateModels(candidateModel: Model, variable: AST): ListBuffer[Model] = {
     var modelList = ListBuffer() : ListBuffer[Model]
 
+    for (i <- 1 to 5) {
+      val reconstructedModel = copyModel(candidateModel)
+
+      val newSymbol = modifyBits(candidateModel(variable).symbol, i)
+      val newAST = AST(newSymbol, List(), List())
+
+      reconstructedModel.overwrite(variable, newAST)
+      modelList += reconstructedModel
+    }
+
+    modelList
+  }
+
+  def generateNeighborhood(ast: AST, candidateModel: Model, referenceModel: Model, failedAtoms: List[AST]): ListBuffer[Model] = {
+    var modelList = ListBuffer() : ListBuffer[Model]
+
+    val fitness = failedAtoms.size
     val atoms = failedAtoms.flatMap(_.iterator).toList
     val variables = atoms.filter(x => x.isVariable)
-
-    println("Variables: ")
-    variables.foreach(x => println(x))
 
     for (v <- variables) {
       v.symbol match {
         case _: FPVar =>
-          val reconstructedModel = copyModel(candidateModel)
-          println("Assigning new value to " + v)
-
-          val newSymbol = modifyBits(candidateModel(v).symbol)
-          val newAST = AST(newSymbol, List(), List())
-
-          reconstructedModel.overwrite(v, newAST)
-          modelList += reconstructedModel
+          modelList ++= generateModels(candidateModel, v)
         case _ =>
           println("Not FPVar, doing nothing...")
       }
     }
 
-//    AST.postVisit[Model, Model](ast, reconstructedModel, candidateModel, reconstructNode)
-
-//    reconstructedModel
     modelList
   }
 
-  def generateNeighborhood(ast: AST, candidateModel: Model, referenceModel: Model, criticalAtoms: List[AST]): ListBuffer[Model] = {
-    val reconstructedModels = generateModels(ast, candidateModel, criticalAtoms)
-    reconstructedModels
+  def hasModel(models: ListBuffer[(Model, Double)], model : Model): Boolean = {
+    var hasModel = false
+    models.foreach(x => if(x._1.variableValuation == model.variableValuation
+      && x._1.subexprValuation == model.subexprValuation) hasModel = true)
+    hasModel
   }
 
-  def filterByFitness(models: ListBuffer[Model], decodedModel: Model, formula: AST): ListBuffer[Model] = {
-    for (m <- models) {
-      val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).map(_.iterator).flatten.toList
-      val failedAtoms = critical.filter( (x : AST) => decodedModel(x) != m(x))
+  def calculateFitness(failedAtoms: List[AST], model: Model): Double = {
+    var fitness : Double = 0
+    for (a <- failedAtoms) {
+      val (left: FloatingPointLiteral, right: FloatingPointLiteral) =
+        (model(a.children(0)).symbol, model(a.children(1)).symbol)
+      val lDouble = FloatingPointTheory.bitsToDouble(left)
+      val rDouble = FloatingPointTheory.bitsToDouble(right)
+
+      a.symbol.name match {
+        case FloatingPointTheory.FPFPEqualityFactory.symbolName =>
+          fitness += Math.abs(lDouble - rDouble)
+        case FloatingPointTheory.FPLessThanFactory.symbolName =>
+          fitness += lDouble - rDouble
+        case FloatingPointTheory.FPGreaterThanFactory.symbolName =>
+          fitness += rDouble - lDouble
+        case _ =>
+          throw new Exception("Not a valid Predicate " + a.symbol.name)
+      }
     }
-    models
+    fitness
+  }
+
+  def filterByFitness(models: ListBuffer[Model], filteredModels: ListBuffer[(Model, Double)], decodedModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
+    for (m <- models) {
+      val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
+      val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != m(x).symbol)
+      val fitness = calculateFitness(failedAtoms, m)
+      val mTuple = (m, fitness)
+      if (!hasModel(filteredModels, m))
+        filteredModels += mTuple
+    }
+    val sortedModels = filteredModels.sortBy(_._2)
+    sortedModels
   }
   /**
     * Tries to apply the equality-as-assignment heuristic, returning true if successful (else otherwise)
@@ -163,7 +198,7 @@ trait LocalSearchReconstruction extends ModelReconstruction {
 
   def reconstructNode( decodedModel  : Model, candidateModel : Model, ast : AST) : Model = {
     val AST(symbol, label, children) = ast
-    if (children.length > 0 && !equalityAsAssignment(ast, decodedModel, candidateModel)) {
+    if (children.length > 0) { // && !equalityAsAssignment(ast, decodedModel, candidateModel)) {
       val newChildren = for ( c <- children) yield {
         Toolbox.getCurrentValue(c, decodedModel, candidateModel)
       }
@@ -233,24 +268,34 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     candidateModel
   }
 
+  def postReconstruct(ast : AST, decodedModel : Model) : Model = {
+    val reconstructedModel = new Model()
+    AST.postVisit[Model, Model](ast, reconstructedModel, decodedModel, reconstructNode)
+    reconstructedModel
+  }
+
   def reconstruct(formula: AST, decodedModel: Model) : Model = {
     println("LocalSearchReconstruction")
     var done : Boolean = false
     var steps = 0
+    var filteredModels = ListBuffer() : ListBuffer[(Model, Double)]
+
     var referenceM = decodedModel
     while (!done && steps < 10) {
-      val reconstructedModel: Model = basicReconstruct(formula, referenceM)
-      val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).flatMap(_.iterator).toList
+      val reconstructedModel: Model = postReconstruct(formula, referenceM)
+      val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
         println("Searching for candidates...")
         val neighborHood = generateNeighborhood(formula, reconstructedModel, referenceM, failedAtoms)
-        val filteredModels = filterByFitness(neighborHood, decodedModel, formula)
+        filteredModels = filterByFitness(neighborHood, filteredModels, decodedModel, formula)
 
-        referenceM = filteredModels.head
+        referenceM = filteredModels.head._1
+        filteredModels.remove(0)
       } else {
         done = true
+        println("Model found: " + reconstructedModel)
         referenceM = reconstructedModel
       }
       steps += 1
