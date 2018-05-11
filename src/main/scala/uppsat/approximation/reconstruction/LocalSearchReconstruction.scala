@@ -15,7 +15,7 @@ import uppsat.theory.FloatingPointTheory
 import uppsat.theory.BooleanTheory._
 import uppsat.theory.BooleanTheory.BoolEquality
 import uppsat.theory.IntegerTheory.{IntEquality, IntegerPredicateSymbol}
-import uppsat.theory.FloatingPointTheory.{FPEqualityFactory, FPFPEqualityFactory, FPPredicateSymbol, FPSpecialValuesFactory, FPVar, FloatingPointLiteral, FloatingPointPredicateSymbol, RMVar, RoundingModeEquality}
+import uppsat.theory.FloatingPointTheory.{FPConstantFactory, FPEqualityFactory, FPFPEqualityFactory, FPPredicateSymbol, FPSpecialValuesFactory, FPVar, FloatingPointLiteral, FloatingPointPredicateSymbol, RMVar, RoundingModeEquality}
 import uppsat.theory.FloatingPointTheory.FPSortFactory.FPSort
 import uppsat.approximation.toolbox.Toolbox
 
@@ -36,17 +36,20 @@ trait LocalSearchReconstruction extends ModelReconstruction {
 
   def modifyBits(symbol: ConcreteFunctionSymbol, shift: Int): ConcreteFunctionSymbol = {
     symbol match {
-      case _: FPSpecialValuesFactory => symbol
       case fpLit: FloatingPointLiteral =>
-        val (sign, ebits, sbits) = (fpLit.sign, fpLit.eBits, fpLit.sBits)
-        val lastOneIndex = getLastOneIndex(sbits)
-        
-        var modifyIndex = lastOneIndex + shift
-        if (!(modifyIndex < sbits.size))
-          modifyIndex = sbits.size - 1
-        val newsBits = sbits.updated(modifyIndex, 1)
-        val newSymbol = FloatingPointTheory.fp(sign, ebits, newsBits)(fpLit.sort)
-        newSymbol
+        fpLit.getFactory match {
+          case fpConstant :FPConstantFactory =>
+            val (sign, ebits, sbits) = (fpConstant.sign, fpConstant.eBits, fpConstant.sBits)
+            val lastOneIndex = getLastOneIndex(sbits)
+
+            var modifyIndex = lastOneIndex + shift
+            if (!(modifyIndex < sbits.size))
+              modifyIndex = sbits.size - 1
+            val newsBits = sbits.updated(modifyIndex, 1)
+            val newSymbol = FloatingPointTheory.fp(sign, ebits, newsBits)(fpLit.sort)
+            newSymbol
+          case _ => symbol
+        }
       case _ => symbol
     }
   }
