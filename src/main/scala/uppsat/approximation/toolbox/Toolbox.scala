@@ -63,14 +63,16 @@ object Toolbox {
                 retrieveCriticalAtoms(decodedModel)(falseConjuncts.head)
               }
 
-              case (BoolDisjunction, BoolTrue) =>
+              case  (_ : NaryDisjunction, BoolTrue)
+              |     (BoolDisjunction, BoolTrue) =>
                 val trueDisjuncts = children.filter((x : AST) => decodedModel(x).symbol == BoolTrue)
                 if (trueDisjuncts.length == 0)
                   throw new Exception("Retrieve Critical Literals : True disjunction with no true child")
                 // TODO: We need not always take the first false child. Heuristics possible.
                 retrieveCriticalAtoms(decodedModel)(trueDisjuncts.head)
 
-              case (BoolDisjunction, BoolFalse) => 
+              case (_ : NaryDisjunction, BoolFalse)
+              |    (BoolDisjunction, BoolFalse) =>
                 (for (c <- children) yield retrieveCriticalAtoms(decodedModel)(c)).flatten
 
               case (BoolImplication, BoolFalse) => 

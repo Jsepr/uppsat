@@ -113,13 +113,14 @@ trait LocalSearchReconstruction extends ModelReconstruction {
           val rDouble = FloatingPointTheory.bitsToDouble(rfp)
 
           a.symbol.name match {
-            case FloatingPointTheory.FPFPEqualityFactory.symbolName =>
+            case FloatingPointTheory.FPFPEqualityFactory.symbolName
+            |    FloatingPointTheory.FPEqualityFactory.symbolName =>
               fitness += Math.abs(lDouble - rDouble)
-            case FloatingPointTheory.FPEqualityFactory.symbolName =>
-              fitness += Math.abs(lDouble - rDouble)
-            case FloatingPointTheory.FPLessThanFactory.symbolName =>
+            case FloatingPointTheory.FPLessThanFactory.symbolName
+            |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
               fitness += lDouble - rDouble
-            case FloatingPointTheory.FPGreaterThanFactory.symbolName =>
+            case FloatingPointTheory.FPGreaterThanFactory.symbolName
+            |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
               fitness += rDouble - lDouble
             case _ =>
               throw new Exception("Not a valid Predicate " + a.symbol.name)
@@ -132,11 +133,12 @@ trait LocalSearchReconstruction extends ModelReconstruction {
 
   def filterByFitness(models: ListBuffer[Model], filteredModels: ListBuffer[(Model, Double)], decodedModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
     for (m <- models) {
+      val evalM = postReconstruct(formula, m)
       val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
-      val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != m(x).symbol)
-      val fitness = calculateFitness(failedAtoms, m)
-      val mTuple = (m, fitness)
-      if (!hasModel(filteredModels, m))
+      val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != evalM(x).symbol)
+      val fitness = calculateFitness(failedAtoms, evalM)
+      val mTuple = (evalM, fitness)
+      if (!hasModel(filteredModels, evalM))
         filteredModels += mTuple
     }
     val sortedModels = filteredModels.sortBy(_._2)
@@ -288,11 +290,11 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     var filteredModels = ListBuffer() : ListBuffer[(Model, Double)]
 
     var referenceM = decodedModel
+    val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
     println("Searching for candidates...")
     while (!done && steps < 10) {
       val reconstructedModel: Model = postReconstruct(formula, referenceM)
-      val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
