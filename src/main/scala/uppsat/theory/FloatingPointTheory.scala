@@ -532,7 +532,7 @@ def floatFPEquality(left : AST, right : AST) =
 
   
   def ebitsToInt(bits : List[Int]) : Int = {
-    val sum = bitsToInt(bits.tail.reverse)
+    val sum = bitsToInt(bits.reverse)
     sum - 2.pow(bits.length - 1).toInt + 1
    }
   
@@ -541,7 +541,7 @@ def floatFPEquality(left : AST, right : AST) =
       throw new Exception("Converting to a double fpa with more than 64 bits")
     
     val exponent = eBits.head :: List.fill(11 - eBits.length)(1 - eBits.head) ++ eBits.tail
-    val significand = sBits.tail ++ List.fill(53 - sBits.length)(0)
+    val significand = sBits ++ List.fill(52 - sBits.length)(0)
     val bits = sign :: exponent ++ significand
     java.lang.Double.longBitsToDouble(BigInt(bits.mkString(""), 2).toLong)
 //    // TODO: subnormal numbers
