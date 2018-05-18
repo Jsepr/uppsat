@@ -78,10 +78,14 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     newModel
   }
 
-  def generateModels(candidateModel: Model, variable: AST): ListBuffer[Model] = {
+  def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[Model] = {
     var modelList = ListBuffer() : ListBuffer[Model]
+    var noModels = 5
 
-    for (i <- -1 to 5) {
+    if (iteration < 5)
+      noModels = iteration + 1
+
+    for (i <- -1 to noModels) {
       val reconstructedModel = copyModel(candidateModel)
 
       val newSymbol = modifyBits(candidateModel(variable).symbol, i)
@@ -94,7 +98,7 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     modelList
   }
 
-  def generateNeighborhood(ast: AST, candidateModel: Model, failedAtoms: List[AST]): ListBuffer[Model] = {
+  def generateNeighborhood(ast: AST, candidateModel: Model, failedAtoms: List[AST], iteration: Int): ListBuffer[Model] = {
     var modelList = ListBuffer() : ListBuffer[Model]
 
     val variables = failedAtoms.flatMap(_.iterator).toList.filter(x => x.isVariable)
@@ -102,7 +106,7 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     for (v <- variables) {
       v.symbol match {
         case _: FPVar =>
-          modelList = modelList ++ generateModels(candidateModel, v)
+          modelList = modelList ++ generateModels(candidateModel, v, iteration)
         case _ =>
       }
     }
@@ -120,8 +124,8 @@ trait LocalSearchReconstruction extends ModelReconstruction {
   def calculateFitness(failedAtoms: List[AST], model: Model): Double = {
     var fitness : Double = 0
     for (a <- failedAtoms) {
-      val (left, right) =
-        (model(a.children(0)).symbol, model(a.children(1)).symbol)
+      val (left, right) = (model(a.children(0)).symbol, model(a.children(1)).symbol)
+
       (left, right) match {
         case (lfp : FloatingPointLiteral, rfp: FloatingPointLiteral) =>
           val lDouble = FloatingPointTheory.bitsToDouble(lfp)
@@ -147,15 +151,16 @@ trait LocalSearchReconstruction extends ModelReconstruction {
   }
 
   def filterByFitness(models: ListBuffer[Model], filteredModels: ListBuffer[(Model, Double)], critical: List[AST], decodedModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
+    val newModels = filteredModels
     for (m <- models) {
       val evalM = postReconstruct(formula, m)
       val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != evalM(x).symbol)
       val fitness = calculateFitness(failedAtoms, evalM)
       val mTuple = (evalM, fitness)
-      if (!hasModel(filteredModels, evalM))
-        filteredModels += mTuple
+      if (!hasModel(newModels, evalM))
+        newModels += mTuple
     }
-    val sortedModels = filteredModels.sortBy(_._2)
+    val sortedModels = newModels.sortBy(_._2)
     sortedModels
   }
   /**
@@ -303,31 +308,31 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     var steps = 0
     var filteredModels = ListBuffer() : ListBuffer[(Model, Double)]
 
-    var referenceM = decodedModel
+    var referenceModel = decodedModel
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
     while (!done && steps < 10) {
-      val reconstructedModel: Model = postReconstruct(formula, referenceM)
+      val reconstructedModel: Model = postReconstruct(formula, referenceModel)
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
-        println("Searching for candidates...")
-        val neighborHood = generateNeighborhood(formula, reconstructedModel, failedAtoms)
-        filteredModels = filterByFitness(neighborHood, filteredModels, critical, decodedModel, formula)
+//        println("Searching for candidates...")
+        val neighborHood = generateNeighborhood(formula, reconstructedModel, failedAtoms, steps)
+        filteredModels = filterByFitness(neighborHood, filteredModels.dropRight(filteredModels.length - 5), critical, decodedModel, formula)
 
-        referenceM = filteredModels.head._1
-        println("Candidate model: ")
-        println(referenceM)
-        println("Fitness: " + filteredModels.head._2)
+        referenceModel = filteredModels.head._1
+//        println("Candidate model: ")
+//        println(referenceModel)
+//        println("Fitness: " + filteredModels.head._2)
         filteredModels.remove(0)
       } else {
         done = true
-        println("Model found: " + reconstructedModel)
-        referenceM = reconstructedModel
+        println("Model found " + "in iteration " + steps + ": " + reconstructedModel)
+        referenceModel = reconstructedModel
       }
       steps += 1
     }
 
-    referenceM
+    referenceModel
   }
 }
