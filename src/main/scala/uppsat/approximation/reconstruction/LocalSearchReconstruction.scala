@@ -80,9 +80,9 @@ trait LocalSearchReconstruction extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[Model] = {
     var modelList = ListBuffer() : ListBuffer[Model]
-    var noModels = 5
+    var noModels = 3
 
-    if (iteration < 5)
+    if (iteration < 3)
       noModels = iteration + 1
 
     for (i <- -1 to noModels) {
@@ -311,7 +311,7 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     var referenceModel = decodedModel
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
-    while (!done && steps < 10) {
+    while (!done && steps < 20) {
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
