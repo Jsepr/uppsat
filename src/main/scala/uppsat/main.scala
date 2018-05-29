@@ -63,6 +63,7 @@ object globalOptions {
     str match {
       case "ijcar" =>  new Approximation(IJCARSmallFloatsApp)
       case "ijcar-ls" => new Approximation(IJCARSmallFloatsLocalSearch)
+      case "ijcar-ls2" => new Approximation(IJCARSmallFloatsLocalSearch2)
       case "saturation" =>  new Approximation(FxPntSmallFloatsApp)
       case "smallints" =>  new Approximation(SmallIntsApp)
       case "reals" =>  new Approximation(FPARealApp)

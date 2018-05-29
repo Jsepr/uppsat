@@ -8,7 +8,7 @@ import uppsat.theory.FloatingPointTheory._
 import uppsat.theory.BooleanTheory.BooleanSort
 import uppsat.Timer
 import uppsat.ModelEvaluator.Model
-import uppsat.approximation.reconstruction.LocalSearchReconstruction
+import uppsat.approximation.reconstruction.{LocalSearchReconstruction, LocalSearchReconstruction2}
 import uppsat.precision.PrecisionMap.Path
 //import uppsat.Encoder.PathMap
 import uppsat.theory.FloatingPointTheory.FPSortFactory.FPSort
@@ -289,6 +289,13 @@ object IJCARSmallFloatsLocalSearch extends SmallFloatsContext
   with LocalSearchReconstruction
   with SmallFloatsMGRefinementStrategy
   with SmallFloatsPGRefinementStrategy
+
+object IJCARSmallFloatsLocalSearch2 extends SmallFloatsContext
+  with SmallFloatsCodec
+  with LocalSearchReconstruction2
+  with SmallFloatsMGRefinementStrategy
+  with SmallFloatsPGRefinementStrategy
+
 
 object IJCARSmallFloatsNodeByNodeApp extends SmallFloatsContext 
                                    with SmallFloatsCodec
