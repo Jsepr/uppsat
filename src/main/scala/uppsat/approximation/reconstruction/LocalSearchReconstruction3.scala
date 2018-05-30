@@ -44,7 +44,10 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def flipBits(fp: List[Int], from: Int, end: Int): List[Int] = {
     var flippedFp = fp
-    for (i <- from to end) {
+    var newEnd = end
+    if (end >= fp.length)
+      newEnd = fp.length - 1
+    for (i <- from to newEnd) {
       if (fp(i) == 0) {
         flippedFp = flippedFp.updated(i, 1)
       } else {
@@ -56,6 +59,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def modByLastOne(fpConstant: FPConstantFactory, shift: Int, sort:FPSort): ConcreteFunctionSymbol = {
     val (sign, ebits, sbits) = (fpConstant.sign, fpConstant.eBits, fpConstant.sBits)
+
     var lastOneIndex = getLastOneIndex(sbits, sbits.length - 1)
     var neweBits = ebits
     var newsBits = sbits
@@ -88,6 +92,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
     var neweBits = ebits
     var newsBits = sbits
+
     if (shift < 0) {
       val newBits = makeSmaller(fpConstant, shift)
       neweBits = newBits._1
@@ -132,10 +137,10 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     var newsBits = sbits
     var neweBits = ebits
 
-    if (lastOneIndex < 0) {
-      newsBits = flipBits(newsBits, 0, shift)
+    if (lastOneIndex < 0 || lastOneIndex < exp) {
+      newsBits = flipBits(newsBits, exp, exp + shift)
     } else {
-      newsBits = flipBits(newsBits, lastOneIndex + 1, lastOneIndex + shift)
+      newsBits = flipBits(newsBits, lastOneIndex + 1, lastOneIndex + 1 + shift)
     }
 
     val newBits = (neweBits, newsBits)
@@ -156,11 +161,11 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
               newSymbol
             case _ =>
               if (shift < 0) {
-                val (neweBits, newsBits) = makeSmaller(fpConstant, 1)
+                val (neweBits, newsBits) = makeSmaller(fpConstant, shift)
                 val newSymbol = FloatingPointTheory.fp(fpConstant.sign, neweBits, newsBits)(fpLit.sort)
                 newSymbol
               } else {
-                val (neweBits, newsBits) = makeBigger(fpConstant, 1)
+                val (neweBits, newsBits) = makeBigger(fpConstant, shift)
                 val newSymbol = FloatingPointTheory.fp(fpConstant.sign, neweBits, newsBits)(fpLit.sort)
                 newSymbol
               }
@@ -173,12 +178,10 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[ConcreteFunctionSymbol] = {
     var modelList = ListBuffer() : ListBuffer[ConcreteFunctionSymbol]
-    var noModels = 4
+    var noModels = 5
     var method = LAST_ONE
-
-    if (iteration < 3) {
-      method = MOVE_ONE
-      noModels = 1
+    if (iteration > 10 && iteration % 2 == 0) {
+      method = EARLY
     }
 
     for (i <- -noModels to noModels) {
