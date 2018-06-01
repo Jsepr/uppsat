@@ -146,7 +146,7 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[ConcreteFunctionSymbol] = {
     var modelList = ListBuffer() : ListBuffer[ConcreteFunctionSymbol]
-    val noModels = 4
+    val noModels = 1
     var method = LAST_ONE
 
 //    if (iteration < 3)
@@ -181,8 +181,8 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
     modelList
   }
 
-  def calculateFitness(failedAtoms: List[AST], model: Model): Double = {
-    var fitness : Double = 0
+  def calculateScore(failedAtoms: List[AST], model: Model): Double = {
+    var score : Double = 0
     for (a <- failedAtoms) {
       val (left, right) = (model(a.children(0)).symbol, model(a.children(1)).symbol)
 
@@ -194,41 +194,41 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
           a.symbol.name match {
             case FloatingPointTheory.FPFPEqualityFactory.symbolName
             |    FloatingPointTheory.FPEqualityFactory.symbolName =>
-              fitness += Math.abs(lDouble - rDouble)
+              score += Math.abs(lDouble - rDouble)
             case FloatingPointTheory.FPLessThanFactory.symbolName
             |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
-              fitness += lDouble - rDouble
+              score += lDouble - rDouble
             case FloatingPointTheory.FPGreaterThanFactory.symbolName
             |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
-              fitness += rDouble - lDouble
+              score += rDouble - lDouble
             case _ =>
               throw new Exception("Not a valid Predicate " + a.symbol.name)
           }
         case _ =>
       }
     }
-    fitness
+    score
   }
 
-  def filterByFitness(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], critical: List[AST], decodedModel: Model, referenceModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
+  def orderByScore(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], critical: List[AST], decodedModel: Model, referenceModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
     var newModels = ListBuffer() : ListBuffer[(Model, Double)]
     for (m <- models) {
       var modelCopy = copyModel(referenceModel)
-      var bestFitness = 10000.0
+      var bestScore = 10000.0
       var bestVal = AST(m._2.head, List(), List())
       for (a <- m._2) {
         val newAST = AST(a, List(), List())
         modelCopy.overwrite(m._1, newAST)
         val evalM = postReconstruct(formula, modelCopy)
         val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != evalM(x).symbol)
-        val fitness = calculateFitness(failedAtoms, evalM)
-        if (fitness < bestFitness) {
-          bestFitness = fitness
+        val score = calculateScore(failedAtoms, evalM)
+        if (score < bestScore) {
+          bestScore = score
           bestVal = newAST
         }
       }
       modelCopy.overwrite(m._1, bestVal)
-      val newTuple = (modelCopy, bestFitness)
+      val newTuple = (modelCopy, bestScore)
       newModels += newTuple
     }
     val sortedModels = newModels.sortBy(_._2)
@@ -236,23 +236,32 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
   }
 
 
+  def checkTimeout() : Boolean = {
+    false
+  }
+
   def reconstruct(formula: AST, decodedModel: Model) : Model = {
     println("LocalSearchReconstruction2")
     var done : Boolean = false
     var steps = 0
-    var referenceModel = basicReconstruct(formula, decodedModel)
+    var referenceModel = decodedModel
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
-    while (!done && steps < 50) {
+    val t0 = System.nanoTime()
+    while (!done && steps < 20) {
+      if (checkTimeout())
+        referenceModel
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
-        println("Searching for candidates...")
+        // println("Searching for candidates...")
         val neighborHood = generateNeighborhood(formula, reconstructedModel, failedAtoms, steps)
-        val filteredModels = filterByFitness(neighborHood, critical, decodedModel, referenceModel, formula)
+        val orderedModels = orderByScore(neighborHood, critical, decodedModel, referenceModel, formula)
 
-        referenceModel = filteredModels.head._1
+        // Order Models
+        println(orderedModels.head._2)
+        referenceModel = orderedModels.head._1
       } else {
         done = true
         println("Model found " + "in iteration " + steps + ": \n" + reconstructedModel)
@@ -260,7 +269,9 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
       }
       steps += 1
     }
+    val t1 = System.nanoTime()
 
+    println("LS time elapsed: " + ((t1-t0)/1000000) + "ms")
     referenceModel
   }
 

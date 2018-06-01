@@ -280,7 +280,7 @@ trait SmallFloatsMGRefinementStrategy extends SmallFloatsContext
 
 object IJCARSmallFloatsApp extends SmallFloatsContext 
                               with SmallFloatsCodec
-                              with EqualityAsAssignmentReconstruction
+                              with EmptyReconstruction
                               with SmallFloatsMGRefinementStrategy   
                               with SmallFloatsPGRefinementStrategy
 

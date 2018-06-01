@@ -18,7 +18,6 @@ import scala.collection.mutable.{ListBuffer, Queue, Stack}
 trait LocalSearchReconstruction3 extends ModelReconstruction {
   val LAST_ONE = 0
   val MOVE_ONE = 1
-  val EARLY = 2
 
   def getLastOneIndex(ints: List[Int], from: Int): Int = {
     for (i <- from to 0 by -1) {
@@ -44,10 +43,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def flipBits(fp: List[Int], from: Int, end: Int): List[Int] = {
     var flippedFp = fp
-    var newEnd = end
-    if (end >= fp.length)
-      newEnd = fp.length - 1
-    for (i <- from to newEnd) {
+    for (i <- from to end) {
       if (fp(i) == 0) {
         flippedFp = flippedFp.updated(i, 1)
       } else {
@@ -59,23 +55,19 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def modByLastOne(fpConstant: FPConstantFactory, shift: Int, sort:FPSort): ConcreteFunctionSymbol = {
     val (sign, ebits, sbits) = (fpConstant.sign, fpConstant.eBits, fpConstant.sBits)
-
     var lastOneIndex = getLastOneIndex(sbits, sbits.length - 1)
     var neweBits = ebits
     var newsBits = sbits
-
-    if (shift < 0) {
+    var modifyIndex = lastOneIndex + shift
+    if (modifyIndex < 0) {
       val newBits = makeSmaller(fpConstant, shift)
       neweBits = newBits._1
       newsBits = newBits._2
+    } else if (modifyIndex >= sbits.size) {
+      val newBits = makeBigger(fpConstant, shift)
+      neweBits = newBits._1
+      newsBits = newBits._2
     } else {
-      if (lastOneIndex < 0)
-        lastOneIndex = 0
-      var modifyIndex = lastOneIndex + shift
-      if (!(modifyIndex < sbits.size))
-        modifyIndex = sbits.size - 1
-
-
       if (sbits(modifyIndex) == 1)
         newsBits = sbits.updated(modifyIndex, 0)
       else
@@ -92,7 +84,6 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
     var neweBits = ebits
     var newsBits = sbits
-
     if (shift < 0) {
       val newBits = makeSmaller(fpConstant, shift)
       neweBits = newBits._1
@@ -105,6 +96,21 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     }
     val newSymbol = FloatingPointTheory.fp(sign, neweBits, newsBits)(sort)
     newSymbol
+  }
+
+  def makeBigger(fpConstant: FPConstantFactory, shift: Int): (List[Int], List[Int]) = {
+    val (sign, ebits, sbits) = (fpConstant.sign, fpConstant.eBits, fpConstant.sBits)
+    val exp = FloatingPointTheory.unbiasExp(ebits, ebits.length)
+
+    var newsBits = sbits
+    var neweBits = ebits
+
+    val newExp = exp
+    neweBits = FloatingPointTheory.intToBits(FloatingPointTheory.biasExp(newExp, ebits.length), ebits.length)
+    newsBits = flipBits(newsBits, 0, sbits.length - 1)
+
+    val newBits = (neweBits, newsBits)
+    newBits
   }
 
   def makeSmaller(fpConstant: FPConstantFactory, shift: Int): (List[Int], List[Int]) = {
@@ -122,54 +128,31 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     } else if (lastOneIndex < exp) {
       newsBits = flipBits(newsBits, lastOneIndex, exp - shift)
     } else {
-      newsBits = flipBits(newsBits, lastOneIndex, lastOneIndex - shift)
+      var modifyIndex = lastOneIndex - shift
+      if (modifyIndex >= sbits.length)
+        modifyIndex = sbits.length - 1
+      newsBits = flipBits(newsBits, lastOneIndex, modifyIndex)
     }
 
     val newBits = (neweBits, newsBits)
     newBits
   }
 
-  def makeBigger(fpConstant: FPConstantFactory, shift: Int): (List[Int], List[Int]) = {
-    val (sign, ebits, sbits) = (fpConstant.sign, fpConstant.eBits, fpConstant.sBits)
-    val exp = FloatingPointTheory.unbiasExp(ebits, ebits.length)
-    val lastOneIndex = getLastOneIndex(sbits, sbits.size - 2)
 
-    var newsBits = sbits
-    var neweBits = ebits
-
-    if (lastOneIndex < 0 || lastOneIndex < exp) {
-      newsBits = flipBits(newsBits, exp, exp + shift)
-    } else {
-      newsBits = flipBits(newsBits, lastOneIndex + 1, lastOneIndex + 1 + shift)
-    }
-
-    val newBits = (neweBits, newsBits)
-    newBits
-  }
 
   def modifyBits(symbol: ConcreteFunctionSymbol, shift: Int, method: Int): ConcreteFunctionSymbol = {
     symbol match {
       case fpLit: FloatingPointLiteral =>
         fpLit.getFactory match {
           case fpConstant :FPConstantFactory =>
-          method match {
-            case LAST_ONE =>
-              val newSymbol = modByLastOne(fpConstant, shift, fpLit.sort)
-              newSymbol
-            case MOVE_ONE =>
-              val newSymbol = moveLastOne(fpConstant, shift, fpLit.sort)
-              newSymbol
-            case _ =>
-              if (shift < 0) {
-                val (neweBits, newsBits) = makeSmaller(fpConstant, shift)
-                val newSymbol = FloatingPointTheory.fp(fpConstant.sign, neweBits, newsBits)(fpLit.sort)
+            method match {
+              case LAST_ONE =>
+                val newSymbol = modByLastOne(fpConstant, shift, fpLit.sort)
                 newSymbol
-              } else {
-                val (neweBits, newsBits) = makeBigger(fpConstant, shift)
-                val newSymbol = FloatingPointTheory.fp(fpConstant.sign, neweBits, newsBits)(fpLit.sort)
+              case _ =>
+                val newSymbol = moveLastOne(fpConstant, shift, fpLit.sort)
                 newSymbol
-              }
-          }
+            }
           case _ => symbol
         }
       case _ => symbol
@@ -178,11 +161,8 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[ConcreteFunctionSymbol] = {
     var modelList = ListBuffer() : ListBuffer[ConcreteFunctionSymbol]
-    var noModels = 5
+    val noModels = 5
     var method = LAST_ONE
-    if (iteration > 10 && iteration % 2 == 0) {
-      method = EARLY
-    }
 
     for (i <- -noModels to noModels) {
       val newSymbol = modifyBits(candidateModel(variable).symbol, i, method)
@@ -213,8 +193,8 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     modelList
   }
 
-  def calculateFitness(failedAtoms: List[AST], model: Model): Double = {
-    var fitness : Double = 0
+  def calculateScore(failedAtoms: List[AST], model: Model): Double = {
+    var score : Double = 0
     for (a <- failedAtoms) {
       val (left, right) = (model(a.children(0)).symbol, model(a.children(1)).symbol)
 
@@ -225,67 +205,78 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
 
           a.symbol.name match {
             case FloatingPointTheory.FPFPEqualityFactory.symbolName
-            |    FloatingPointTheory.FPEqualityFactory.symbolName =>
-              fitness += Math.abs(lDouble - rDouble)
+                 |    FloatingPointTheory.FPEqualityFactory.symbolName =>
+              score += Math.abs(lDouble - rDouble)
             case FloatingPointTheory.FPLessThanFactory.symbolName
-            |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
-              fitness += lDouble - rDouble
+                 |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
+              score += lDouble - rDouble
             case FloatingPointTheory.FPGreaterThanFactory.symbolName
-            |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
-              fitness += rDouble - lDouble
+                 |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
+              score += rDouble - lDouble
             case _ =>
               throw new Exception("Not a valid Predicate " + a.symbol.name)
           }
         case _ =>
       }
     }
-    fitness
+    score
   }
 
-  def filterByFitness(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], critical: List[AST], decodedModel: Model, referenceModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
+  def getRandomModel(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], referenceModel: Model, failedAtoms: List[AST]): Model = {
     var newModels = ListBuffer() : ListBuffer[(Model, Double)]
-    for (m <- models) {
-      var modelCopy = copyModel(referenceModel)
-      var bestFitness = 10000.0
-      var bestVal = AST(m._2.head, List(), List())
-      for (a <- m._2) {
-        val newAST = AST(a, List(), List())
-        modelCopy.overwrite(m._1, newAST)
-        val evalM = postReconstruct(formula, modelCopy)
-        val failedAtoms = critical.filter((x: AST) => decodedModel(x).symbol != evalM(x).symbol)
-        val fitness = calculateFitness(failedAtoms, evalM)
-        if (fitness < bestFitness) {
-          bestFitness = fitness
-          bestVal = newAST
+    val scoreToBeat = calculateScore(failedAtoms, referenceModel)
+
+    val r = scala.util.Random
+    if (models.nonEmpty) {
+      val variableIndex = r.nextInt(models.size)
+      if (models(variableIndex)._2.nonEmpty) {
+        val valueIndex = r.nextInt(models(variableIndex)._2.size)
+
+        val newModel = copyModel(referenceModel)
+        val newValue = AST(models(variableIndex)._2(valueIndex), List(), List())
+        newModel.overwrite(models(variableIndex)._1, newValue)
+        val newScore = calculateScore(failedAtoms, newModel)
+        if (newScore < scoreToBeat)
+          newModel
+        else {
+          models(variableIndex)._2.remove(valueIndex)
+          getRandomModel(models, referenceModel, failedAtoms)
         }
+      } else {
+        referenceModel
       }
-      modelCopy.overwrite(m._1, bestVal)
-      val newTuple = (modelCopy, bestFitness)
-      newModels += newTuple
+    } else {
+      referenceModel
     }
-    val sortedModels = newModels.sortBy(_._2)
-    sortedModels
   }
 
+
+  def checkTimeout() : Boolean = {
+    false
+  }
 
   def reconstruct(formula: AST, decodedModel: Model) : Model = {
-    println("LocalSearchReconstruction3")
+    println("LocalSearchReconstruction2")
     var done : Boolean = false
     var steps = 0
-
-    var referenceModel = basicReconstruct(formula, decodedModel)
+    var referenceModel = decodedModel
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
-    while (!done && steps < 50) {
+    val t0 = System.nanoTime()
+    while (!done && steps < 100) {
+      if (checkTimeout())
+        referenceModel
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)
       val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != reconstructedModel(x).symbol)
 
       if (failedAtoms.nonEmpty){
-        println("Searching for candidates...")
+        // println("Searching for candidates...")
         val neighborHood = generateNeighborhood(formula, reconstructedModel, failedAtoms, steps)
-        val filteredModels = filterByFitness(neighborHood, critical, decodedModel, referenceModel, formula)
+        val newModel = getRandomModel(neighborHood, reconstructedModel, failedAtoms)
 
-        referenceModel = filteredModels.head._1
+        // Order Models
+        println(calculateScore(failedAtoms, newModel))
+        referenceModel = newModel
       } else {
         done = true
         println("Model found " + "in iteration " + steps + ": \n" + reconstructedModel)
@@ -293,7 +284,9 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
       }
       steps += 1
     }
+    val t1 = System.nanoTime()
 
+    println("LS time elapsed: " + ((t1-t0)/1000000) + "ms")
     referenceModel
   }
 
