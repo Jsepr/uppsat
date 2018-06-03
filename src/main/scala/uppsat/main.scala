@@ -65,6 +65,7 @@ object globalOptions {
       case "ijcar-ls" => new Approximation(IJCARSmallFloatsLocalSearch)
       case "ijcar-ls2" => new Approximation(IJCARSmallFloatsLocalSearch2)
       case "ijcar-ls3" => new Approximation(IJCARSmallFloatsLocalSearch3)
+      case "ijcar-ls4" => new Approximation(IJCARSmallFloatsLocalSearch4)
       case "saturation" =>  new Approximation(FxPntSmallFloatsApp)
       case "smallints" =>  new Approximation(SmallIntsApp)
       case "reals" =>  new Approximation(FPARealApp)

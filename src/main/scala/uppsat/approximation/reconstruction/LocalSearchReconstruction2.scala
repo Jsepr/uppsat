@@ -146,7 +146,7 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[ConcreteFunctionSymbol] = {
     var modelList = ListBuffer() : ListBuffer[ConcreteFunctionSymbol]
-    val noModels = 1
+    val noModels = 3
     var method = LAST_ONE
 
 //    if (iteration < 3)

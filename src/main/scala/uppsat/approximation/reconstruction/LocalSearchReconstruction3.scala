@@ -239,8 +239,12 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
         if (newScore < scoreToBeat)
           newModel
         else {
-          models(variableIndex)._2.remove(valueIndex)
-          getRandomModel(models, referenceModel, failedAtoms)
+          if (r.nextInt(100) < 80) {
+            models(variableIndex)._2.remove(valueIndex)
+            getRandomModel(models, referenceModel, failedAtoms)
+          } else {
+            newModel
+          }
         }
       } else {
         referenceModel
@@ -263,7 +267,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
     val t0 = System.nanoTime()
-    while (!done && steps < 100) {
+    while (!done && steps < 10000) {
       if (checkTimeout())
         referenceModel
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)
