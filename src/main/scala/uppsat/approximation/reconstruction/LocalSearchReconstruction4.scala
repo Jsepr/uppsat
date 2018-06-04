@@ -63,10 +63,9 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
     var neweBits = ebits
     var newsBits = sbits
     if (modifyIndex < 0) {
-      val exp = FloatingPointTheory.unbiasExp(ebits, ebits.length)
-      val newExp = exp - 1
-      neweBits = FloatingPointTheory.intToBits(FloatingPointTheory.biasExp(newExp, ebits.length), ebits.length)
-      newsBits = List.fill(exp)(1) ++ sbits.drop(exp + 2)
+      val newBits = makeSmaller(fpConstant, shift)
+      neweBits = newBits._1
+      newsBits = newBits._2
     } else {
       newsBits = sbits.updated(modifyIndex, 1)
 
@@ -158,11 +157,11 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[(ConcreteFunctionSymbol, Double)] = {
     var modelList = ListBuffer() : ListBuffer[(ConcreteFunctionSymbol, Double)]
-    val noModels = 5
+    var noModels = 5
     var method = LAST_ONE
 
-//    if (iteration < 3)
-//      method = MOVE_ONE
+    if (iteration < 3)
+      noModels = iteration + 1
 
     for (i <- -noModels to noModels) {
       val newSymbol = (modifyBits(candidateModel(variable).symbol, i, method), 0.0)
@@ -200,10 +199,16 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
         Math.abs(leftSide - rightSide)
       case FloatingPointTheory.FPLessThanFactory.symbolName
            |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
-        leftSide - rightSide
+        if (leftSide > rightSide)
+          leftSide - rightSide
+        else
+          0.0
       case FloatingPointTheory.FPGreaterThanFactory.symbolName
            |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
-        rightSide - leftSide
+        if(rightSide > leftSide)
+          rightSide - leftSide
+        else
+          0.0
       case _ =>
         throw new Exception("Not a valid Predicate " + predicateSymbol.name)
     }
@@ -211,34 +216,70 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
 
   def calculateScore(failedAtoms: List[AST], model: Model, varAssignments: ListBuffer[(AST, ListBuffer[(ConcreteFunctionSymbol, Double)])]) : ListBuffer[(AST, ListBuffer[(ConcreteFunctionSymbol, Double)])] = {
     for (a <- failedAtoms) {
-      val (lSymbol, rSymbol) = (a.children(0).symbol, a.children(1).symbol)
-      val (left, right) = (model(a.children(0)).symbol, model(a.children(1)).symbol)
+      if (a.children.length > 0) {
 
-      (left, right) match {
-        case (lfp : FloatingPointLiteral, rfp: FloatingPointLiteral) =>
-          val lDouble = FloatingPointTheory.bitsToDouble(lfp)
-          val rDouble = FloatingPointTheory.bitsToDouble(rfp)
-          for (i <- varAssignments.indices) {
-            if (lSymbol == varAssignments(i)._1.symbol) {
-              for (x <- varAssignments(i)._2.indices) {
-                val newVal = FloatingPointTheory.bitsToDouble(varAssignments(i)._2(x)._1.asInstanceOf[FloatingPointLiteral])
-                val oldFitness = varAssignments(i)._2(x)._2
-                varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(newVal, rDouble, a.symbol))
-              }
-            } else if (rSymbol == varAssignments(i)._1.symbol) {
-              for (x <- varAssignments(i)._2.indices) {
-                val newVal = FloatingPointTheory.bitsToDouble(varAssignments(i)._2(x)._1.asInstanceOf[FloatingPointLiteral])
-                val oldFitness = varAssignments(i)._2(x)._2
-                varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(lDouble, newVal, a.symbol))
-              }
-            } else {
-              for (x <- varAssignments(i)._2.indices) {
-                val oldFitness = varAssignments(i)._2(x)._2
-                varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(lDouble, rDouble, a.symbol))
+        val (lChild, rChild) = (a.children(0), a.children(1))
+        val (lSymbol, rSymbol) = (a.children(0).symbol, a.children(1).symbol)
+        val (left, right) = (model(lChild).symbol, model(rChild).symbol)
+
+        (left, right) match {
+          case (lfp: FloatingPointLiteral, rfp: FloatingPointLiteral) =>
+            var lDouble = FloatingPointTheory.bitsToDouble(lfp)
+            var rDouble = FloatingPointTheory.bitsToDouble(rfp)
+            for (i <- varAssignments.indices) {
+              val varSymbol = varAssignments(i)._1
+              varSymbol.symbol.name match {
+                case lSymbol.name =>
+                  for (x <- varAssignments(i)._2.indices) {
+                    val newVal = FloatingPointTheory.bitsToDouble(varAssignments(i)._2(x)._1.asInstanceOf[FloatingPointLiteral])
+                    val oldFitness = varAssignments(i)._2(x)._2
+                    varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(newVal, rDouble, a.symbol))
+                  }
+                case rSymbol.name =>
+                  for (x <- varAssignments(i)._2.indices) {
+                    val newVal = FloatingPointTheory.bitsToDouble(varAssignments(i)._2(x)._1.asInstanceOf[FloatingPointLiteral])
+                    val oldFitness = varAssignments(i)._2(x)._2
+                    varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(lDouble, newVal, a.symbol))
+                  }
+                case _ =>
+                  val leftAssignments = lChild.iterator.filter(_.isVariable).toList
+                  val rightAssignments = rChild.iterator.filter(_.isVariable).toList
+
+                  val oldAssignments = model.variableValuation.toList
+
+                  if (leftAssignments contains varSymbol) {
+                    for (x <- varAssignments(i)._2.indices) {
+                      val oldFitness = varAssignments(i)._2(x)._2
+                      val newAssignments = oldAssignments.filter(_._1 == varSymbol.symbol).map { case (varSymbol.symbol, _) => (varSymbol.symbol, AST(varAssignments(i)._2(x)._1, List(), List())); case y => y }
+
+                      val answer = ModelEvaluator.evalAST(a, rChild.symbol, newAssignments, FloatingPointTheory)
+                      val newAST = answer.get.symbol
+                      val newDouble = FloatingPointTheory.bitsToDouble(newAST.asInstanceOf[FloatingPointLiteral])
+                      varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(newDouble, rDouble, a.symbol))
+                    }
+                  } else if (rightAssignments contains varSymbol) {
+                    for (x <- varAssignments(i)._2.indices) {
+                      val oldFitness = varAssignments(i)._2(x)._2
+                      //val newAssignments = oldAssignments.map{case (varSymbol.symbol, _) => (varSymbol.symbol, AST(varAssignments(i)._2(x)._1, List(), List())); case y => y}
+                      val newAssignments = oldAssignments.filter(_._1 == varSymbol.symbol).map { case (varSymbol.symbol, _) => (varSymbol.symbol, AST(varAssignments(i)._2(x)._1, List(), List())); case y => y }
+
+                      val answer = ModelEvaluator.evalAST(a, lChild.symbol, newAssignments, FloatingPointTheory)
+                      val newAST = answer.get.symbol
+                      val newDouble = FloatingPointTheory.bitsToDouble(newAST.asInstanceOf[FloatingPointLiteral])
+
+                      varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(lDouble, newDouble, a.symbol))
+                    }
+                  } else {
+                    for (x <- varAssignments(i)._2.indices) {
+                      val oldFitness = varAssignments(i)._2(x)._2
+                      varAssignments(i)._2(x) = varAssignments(i)._2(x).copy(_2 = oldFitness + calculateSubScore(lDouble, rDouble, a.symbol))
+                    }
+                  }
+
               }
             }
-          }
-        case _ =>
+          case _ =>
+        }
       }
     }
     varAssignments
@@ -246,8 +287,8 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
 
   def orderByScore(varAssignments: ListBuffer[(AST, ListBuffer[(ConcreteFunctionSymbol, Double)])], critical: List[AST], decodedModel: Model, referenceModel: Model, formula: AST): ListBuffer[(Model, Double)] = {
     var newModels = ListBuffer() : ListBuffer[(Model, Double)]
-    val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != referenceModel(x).symbol)
-
+    //val failedAtoms = critical.filter( (x : AST) => decodedModel(x).symbol != referenceModel(x).symbol)
+    val failedAtoms = critical
     val newScores = calculateScore(failedAtoms, referenceModel, varAssignments)
     for (m <- varAssignments) {
       val values = m._2.sortBy(_._2)
