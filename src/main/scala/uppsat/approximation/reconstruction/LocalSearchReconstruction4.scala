@@ -216,16 +216,16 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
 
   def calculateScore(failedAtoms: List[AST], model: Model, varAssignments: ListBuffer[(AST, ListBuffer[(ConcreteFunctionSymbol, Double)])]) : ListBuffer[(AST, ListBuffer[(ConcreteFunctionSymbol, Double)])] = {
     for (a <- failedAtoms) {
-      if (a.children.length > 0) {
+      if (a.children.nonEmpty) {
 
         val (lChild, rChild) = (a.children(0), a.children(1))
-        val (lSymbol, rSymbol) = (a.children(0).symbol, a.children(1).symbol)
+        val (lSymbol, rSymbol) = (lChild.symbol, rChild.symbol)
         val (left, right) = (model(lChild).symbol, model(rChild).symbol)
 
         (left, right) match {
           case (lfp: FloatingPointLiteral, rfp: FloatingPointLiteral) =>
-            var lDouble = FloatingPointTheory.bitsToDouble(lfp)
-            var rDouble = FloatingPointTheory.bitsToDouble(rfp)
+            val lDouble = FloatingPointTheory.bitsToDouble(lfp)
+            val rDouble = FloatingPointTheory.bitsToDouble(rfp)
             for (i <- varAssignments.indices) {
               val varSymbol = varAssignments(i)._1
               varSymbol.symbol.name match {
@@ -260,7 +260,6 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
                   } else if (rightAssignments contains varSymbol) {
                     for (x <- varAssignments(i)._2.indices) {
                       val oldFitness = varAssignments(i)._2(x)._2
-                      //val newAssignments = oldAssignments.map{case (varSymbol.symbol, _) => (varSymbol.symbol, AST(varAssignments(i)._2(x)._1, List(), List())); case y => y}
                       val newAssignments = oldAssignments.filter(_._1 == varSymbol.symbol).map { case (varSymbol.symbol, _) => (varSymbol.symbol, AST(varAssignments(i)._2(x)._1, List(), List())); case y => y }
 
                       val answer = ModelEvaluator.evalAST(a, lChild.symbol, newAssignments, FloatingPointTheory)
