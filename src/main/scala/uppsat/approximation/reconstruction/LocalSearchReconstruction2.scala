@@ -146,11 +146,11 @@ trait LocalSearchReconstruction2 extends ModelReconstruction {
 
   def generateModels(candidateModel: Model, variable: AST, iteration: Int): ListBuffer[ConcreteFunctionSymbol] = {
     var modelList = ListBuffer() : ListBuffer[ConcreteFunctionSymbol]
-    val noModels = 3
+    var noModels = 3
     var method = LAST_ONE
 
-//    if (iteration < 3)
-//      method = MOVE_ONE
+    if (iteration < 3)
+      noModels = iteration + 1
 
     for (i <- -noModels to noModels) {
       val newSymbol = modifyBits(candidateModel(variable).symbol, i, method)

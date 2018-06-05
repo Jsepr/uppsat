@@ -89,8 +89,8 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     var modelList = ListBuffer() : ListBuffer[Model]
     var noModels = 3
 
-    if (iteration < 3)
-      noModels = iteration + 1
+//    if (iteration < 3)
+//      noModels = iteration + 1
 
     for (i <- -1 to noModels) {
       val reconstructedModel = copyModel(candidateModel)
