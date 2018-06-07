@@ -315,7 +315,7 @@ trait LocalSearchReconstruction4 extends ModelReconstruction {
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
     val t0 = System.nanoTime()
-    while (!done && steps < 50) {
+    while (!done && steps < 20) {
       if (checkTimeout())
         referenceModel
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)

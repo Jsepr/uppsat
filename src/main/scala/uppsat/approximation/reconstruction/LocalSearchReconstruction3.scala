@@ -222,7 +222,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     score
   }
 
-  def getRandomModel(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], referenceModel: Model, failedAtoms: List[AST]): Model = {
+  def getRandomModel(models: ListBuffer[(AST, ListBuffer[ConcreteFunctionSymbol])], referenceModel: Model, failedAtoms: List[AST], temp: Double): Model = {
     var newModels = ListBuffer() : ListBuffer[(Model, Double)]
     val scoreToBeat = calculateScore(failedAtoms, referenceModel)
 
@@ -239,9 +239,9 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
         if (newScore < scoreToBeat)
           newModel
         else {
-          if (r.nextInt(100) < 80) {
+          if (r.nextDouble() > temp) {
             models(variableIndex)._2.remove(valueIndex)
-            getRandomModel(models, referenceModel, failedAtoms)
+            getRandomModel(models, referenceModel, failedAtoms, temp)
           } else {
             newModel
           }
@@ -266,6 +266,7 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
     var referenceModel = decodedModel
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
+    var temp = 1.0
     val t0 = System.nanoTime()
     while (!done && steps < 10000) {
       if (checkTimeout())
@@ -276,8 +277,8 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
       if (failedAtoms.nonEmpty){
         // println("Searching for candidates...")
         val neighborHood = generateNeighborhood(formula, reconstructedModel, failedAtoms, steps)
-        val newModel = getRandomModel(neighborHood, reconstructedModel, failedAtoms)
-
+        val newModel = getRandomModel(neighborHood, reconstructedModel, failedAtoms, temp)
+        temp = temp * 0.99
         // Order Models
         println(calculateScore(failedAtoms, newModel))
         referenceModel = newModel
