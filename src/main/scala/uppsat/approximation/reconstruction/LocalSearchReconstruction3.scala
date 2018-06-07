@@ -202,19 +202,22 @@ trait LocalSearchReconstruction3 extends ModelReconstruction {
         case (lfp : FloatingPointLiteral, rfp: FloatingPointLiteral) =>
           val lDouble = FloatingPointTheory.bitsToDouble(lfp)
           val rDouble = FloatingPointTheory.bitsToDouble(rfp)
-
-          a.symbol.name match {
-            case FloatingPointTheory.FPFPEqualityFactory.symbolName
-                 |    FloatingPointTheory.FPEqualityFactory.symbolName =>
-              score += Math.abs(lDouble - rDouble)
-            case FloatingPointTheory.FPLessThanFactory.symbolName
-                 |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
-              score += lDouble - rDouble
-            case FloatingPointTheory.FPGreaterThanFactory.symbolName
-                 |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
-              score += rDouble - lDouble
+          (lfp.getFactory, rfp.getFactory) match {
+            case (_: FPConstantFactory, _: FPConstantFactory) =>
+              a.symbol.name match {
+                case FloatingPointTheory.FPFPEqualityFactory.symbolName
+                     | FloatingPointTheory.FPEqualityFactory.symbolName =>
+                  score += Math.abs(lDouble - rDouble)
+                case FloatingPointTheory.FPLessThanFactory.symbolName
+                     | FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
+                  score += lDouble - rDouble
+                case FloatingPointTheory.FPGreaterThanFactory.symbolName
+                     | FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
+                  score += rDouble - lDouble
+                case _ =>
+                  throw new Exception("Not a valid Predicate " + a.symbol.name)
+              }
             case _ =>
-              throw new Exception("Not a valid Predicate " + a.symbol.name)
           }
         case _ =>
       }

@@ -130,19 +130,22 @@ trait LocalSearchReconstruction extends ModelReconstruction {
         case (lfp : FloatingPointLiteral, rfp: FloatingPointLiteral) =>
           val lDouble = FloatingPointTheory.bitsToDouble(lfp)
           val rDouble = FloatingPointTheory.bitsToDouble(rfp)
-
-          a.symbol.name match {
-            case FloatingPointTheory.FPFPEqualityFactory.symbolName
-            |    FloatingPointTheory.FPEqualityFactory.symbolName =>
-              score += Math.abs(lDouble - rDouble)
-            case FloatingPointTheory.FPLessThanFactory.symbolName
-            |    FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
-              score += lDouble - rDouble
-            case FloatingPointTheory.FPGreaterThanFactory.symbolName
-            |    FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
-              score += rDouble - lDouble
+          (lfp.getFactory, rfp.getFactory) match {
+            case (_: FPConstantFactory, _: FPConstantFactory) =>
+              a.symbol.name match {
+                case FloatingPointTheory.FPFPEqualityFactory.symbolName
+                     | FloatingPointTheory.FPEqualityFactory.symbolName =>
+                  score += Math.abs(lDouble - rDouble)
+                case FloatingPointTheory.FPLessThanFactory.symbolName
+                     | FloatingPointTheory.FPLessThanOrEqualFactory.symbolName =>
+                  score += lDouble - rDouble
+                case FloatingPointTheory.FPGreaterThanFactory.symbolName
+                     | FloatingPointTheory.FPGreaterThanOrEqualFactory.symbolName =>
+                  score += rDouble - lDouble
+                case _ =>
+                  throw new Exception("Not a valid Predicate " + a.symbol.name)
+              }
             case _ =>
-              throw new Exception("Not a valid Predicate " + a.symbol.name)
           }
         case _ =>
       }
@@ -178,7 +181,7 @@ trait LocalSearchReconstruction extends ModelReconstruction {
     val critical = Toolbox.retrieveCriticalAtoms(decodedModel)(formula).toList
 
     val t0 = System.nanoTime()
-    while (!done && steps < 20) {
+    while (!done && steps < 10) {
       if (checkTimeout())
         referenceModel
       val reconstructedModel: Model = postReconstruct(formula, referenceModel)
